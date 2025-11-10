@@ -1,0 +1,282 @@
+generator client {
+  provider = "prisma-client-js"
+  output   = "../generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model categories {
+  id               String             @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name             String             @db.VarChar(255)
+  event_categories event_categories[]
+}
+
+model event_categories {
+  id          String     @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  category_id String     @db.Uuid
+  event_id    String     @db.Uuid
+  categories  categories @relation(fields: [category_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "fk_event_categories_category")
+  events      events     @relation(fields: [event_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "fk_event_categories_event")
+
+  @@unique([category_id, event_id])
+  @@index([category_id], map: "idx_event_categories_category_id")
+  @@index([event_id], map: "idx_event_categories_event_id")
+}
+
+model event_dates {
+  id                String              @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  event_id          String              @db.Uuid
+  start_at          DateTime            @db.Timestamp(6)
+  end_at            DateTime            @db.Timestamp(6)
+  events            events              @relation(fields: [event_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "fk_event_dates_event")
+  purchased_tickets purchased_tickets[]
+  ticket_types      ticket_types[]
+
+  @@index([event_id], map: "idx_event_dates_event_id")
+}
+
+model event_images {
+  id         String     @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  event_id   String     @db.Uuid
+  image_url  String
+  image_type image_type
+  events     events     @relation(fields: [event_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "fk_event_images_event")
+
+  @@index([event_id], map: "idx_event_images_event_id")
+}
+
+model event_views {
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  event_id  String   @db.Uuid
+  viewed_at DateTime @default(now()) @db.Timestamp(6)
+  events    events   @relation(fields: [event_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "fk_event_views_event")
+
+  @@index([event_id], map: "idx_event_views_event_id")
+  @@index([viewed_at], map: "idx_event_views_viewed_at")
+}
+
+model events {
+  id                String              @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organizer_id      String              @db.Uuid
+  title             String              @db.VarChar(255)
+  description       String
+  location          String?
+  start_time        DateTime            @db.Timestamp(6)
+  end_time          DateTime            @db.Timestamp(6)
+  created_at        DateTime            @default(now()) @db.Timestamp(6)
+  status            event_status        @default(pending)
+  is_online         Boolean             @default(false)
+  event_categories  event_categories[]
+  event_dates       event_dates[]
+  event_images      event_images[]
+  event_views       event_views[]
+  users             users               @relation(fields: [organizer_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "fk_events_organizer")
+  purchased_tickets purchased_tickets[]
+  ticket_types      ticket_types[]
+
+  @@index([end_time], map: "idx_events_end_time")
+  @@index([organizer_id], map: "idx_events_organizer_id")
+  @@index([start_time], map: "idx_events_start_time")
+  @@index([status], map: "idx_events_status")
+}
+
+model order_items {
+  id             String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  order_id       String       @db.Uuid
+  ticket_type_id String       @db.Uuid
+  quantity       Int
+  orders         orders       @relation(fields: [order_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "fk_order_items_order")
+  ticket_types   ticket_types @relation(fields: [ticket_type_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "fk_order_items_ticket_type")
+
+  @@unique([order_id, ticket_type_id])
+  @@index([order_id], map: "idx_order_items_order_id")
+}
+
+model orders {
+  id                   String                 @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  user_id              String                 @db.Uuid
+  buyer_email          String                 @db.VarChar(255)
+  buyer_phone          String                 @db.VarChar(255)
+  payment_method       payment_method         @default(vnpay)
+  total_amount         Decimal                @db.Decimal
+  created_at           DateTime               @default(now()) @db.Timestamp(6)
+  status               orders_status          @default(pending)
+  order_items          order_items[]
+  users                users                  @relation(fields: [user_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "fk_orders_user")
+  payment_transactions payment_transactions[]
+  purchased_tickets    purchased_tickets[]
+
+  @@index([status], map: "idx_orders_status")
+  @@index([user_id], map: "idx_orders_user_id")
+}
+
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+model organizer_payment_methods {
+  id                  String         @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organizer_id        String         @db.Uuid
+  bank_name           String         @db.VarChar(255)
+  bank_branch         String?        @db.VarChar(255)
+  account_number      String         @db.VarChar(255)
+  account_holder_name String         @db.VarChar(255)
+  payment_method      payment_method @default(vnpay)
+  is_default          Boolean        @default(true)
+  created_at          DateTime       @default(now()) @db.Timestamp(6)
+  updated_at          DateTime       @default(now()) @db.Timestamp(6)
+  users               users          @relation(fields: [organizer_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "fk_organizer_payment_methods_user")
+
+  @@index([is_default], map: "idx_organizer_payment_methods_is_default")
+  @@index([organizer_id], map: "idx_organizer_payment_methods_organizer_id")
+}
+
+model organizer_profiles {
+  id                        String  @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  user_id                   String  @db.Uuid
+  organization_name         String
+  description_organization  String  @default("")
+  full_name                 String  @db.VarChar(255)
+  logo_url                  String
+  contact_phone             String  @db.VarChar(255)
+  contact_email             String  @db.VarChar(255)
+  website                   String?
+  users                     users   @relation(fields: [user_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "fk_organizer_profiles_user")
+
+  @@index([user_id], map: "idx_organizer_profiles_user_id")
+}
+
+model payment_transactions {
+  id               String             @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  order_id         String             @db.Uuid
+  payment_method   payment_method     @default(vnpay)
+  transaction_code String             @db.VarChar(255)
+  amount           Decimal            @db.Decimal
+  currency         String             @db.VarChar(255)
+  status           transaction_status @default(pending)
+  gateway_response Json               @db.Json
+  created_at       DateTime           @default(now()) @db.Timestamp(6)
+  confirmed_at     DateTime?          @db.Timestamp(6)
+  orders           orders             @relation(fields: [order_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "fk_payment_transactions_order")
+
+  @@index([order_id], map: "idx_payment_transactions_order_id")
+  @@index([status], map: "idx_payment_transactions_status")
+}
+
+model purchased_tickets {
+  id             String                   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  ticket_type_id String                   @db.Uuid
+  buyer_id       String                   @db.Uuid
+  order_id       String                   @db.Uuid
+  event_date_id  String?                  @db.Uuid
+  serial_number  String                   @unique @db.VarChar(255)
+  price          Decimal                  @db.Decimal
+  status         purchased_tickets_status @default(unused)
+  created_at     DateTime                 @default(now()) @db.Timestamp(6)
+  check_in_at    DateTime?                @db.Timestamp(6)
+  event_id       String                   @db.Uuid
+  users          users                    @relation(fields: [buyer_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "fk_purchased_tickets_buyer")
+  events         events                   @relation(fields: [event_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "fk_purchased_tickets_event")
+  event_dates    event_dates?             @relation(fields: [event_date_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "fk_purchased_tickets_event_date")
+  orders         orders                   @relation(fields: [order_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "fk_purchased_tickets_order")
+  ticket_types   ticket_types             @relation(fields: [ticket_type_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "fk_purchased_tickets_ticket_type")
+
+  @@index([buyer_id], map: "idx_purchased_tickets_buyer_id")
+  @@index([order_id], map: "idx_purchased_tickets_order_id")
+  @@index([status], map: "idx_purchased_tickets_status")
+  @@index([event_id], map: "idx_purchased_tickets_event_id")
+}
+
+model ticket_types {
+  id                     String              @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  event_id               String              @db.Uuid
+  event_date_id          String?             @db.Uuid
+  name                   String              @db.VarChar(255)
+  description            String?
+  price                  Decimal             @db.Decimal
+  initial_quantity       Int
+  remaining_quantity     Int
+  reserved_quantity      Int                 @default(0)
+  reservation_expires_at DateTime?           @db.Timestamp(6)
+  status                 ticket_type_status  @default(active)
+  created_at             DateTime            @default(now()) @db.Timestamp(6)
+  updated_at             DateTime            @default(now()) @db.Timestamp(6)
+  order_items            order_items[]
+  purchased_tickets      purchased_tickets[]
+  events                 events              @relation(fields: [event_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "fk_ticket_types_event")
+  event_dates            event_dates?        @relation(fields: [event_date_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "fk_ticket_types_event_date")
+
+  @@index([event_id], map: "idx_ticket_types_event_id")
+  @@index([status], map: "idx_ticket_types_status")
+  @@index([reservation_expires_at], map: "idx_ticket_types_reservation_expires")
+}
+
+model users {
+  id                        String                      @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  full_name                 String                      @db.VarChar(255)
+  phone                     String?                     @db.VarChar(255)
+  gender                    Boolean?
+  email                     String                      @unique @db.VarChar(255)
+  date_of_birth             DateTime?                   @db.Timestamptz(6)
+  avatar_url                String?
+  address                   String?
+  password                  String?                     @db.VarChar(255)
+  created_at                DateTime                    @default(now()) @db.Timestamp(6)
+  role                      user_role                   @default(user)
+  google_id                 String?                     @db.VarChar(255)
+  events                    events[]
+  orders                    orders[]
+  organizer_payment_methods organizer_payment_methods[]
+  organizer_profiles        organizer_profiles[]
+  purchased_tickets         purchased_tickets[]
+
+  @@index([role], map: "idx_users_role")
+}
+
+enum event_status {
+  pending
+  rejected
+  approved
+}
+
+enum orders_status {
+  paid
+  failed
+  pending
+  expired
+}
+
+enum payment_method {
+  vnpay
+  zalopay
+  momo
+}
+
+enum purchased_tickets_status {
+  used
+  expired
+  unused
+}
+
+enum ticket_type_status {
+  active
+  sold_out
+  hidden
+}
+
+enum transaction_status {
+  pending
+  success
+  failed
+}
+
+enum user_role {
+  user
+  organizer
+  admin
+}
+
+enum image_type {
+  banner
+  card
+}
