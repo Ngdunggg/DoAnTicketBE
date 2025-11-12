@@ -33,4 +33,16 @@ export class PurchasedTicketController {
     async checkInTicket(@Param('ticketId') ticketId: string, @Body() body: { status: purchased_tickets_status }) {
         return this.purchasedTicketService.checkInTicket(ticketId, body.status);
     }
+
+    @Public()
+    @Get('debug/expire-check')
+    async getTicketsToExpire() {
+        return this.purchasedTicketService.getTicketsToExpire();
+    }
+
+    @Public()
+    @Get('debug/expire-now')
+    async expireTicketsNow() {
+        return this.purchasedTicketService.expireTicketsForEndedEvents();
+    }
 }
