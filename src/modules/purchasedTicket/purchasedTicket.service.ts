@@ -51,7 +51,7 @@ export class PurchasedTicketService {
             };
         }
 
-        const eventInfo = await this.eventService.getEventById(eventId);
+        const eventInfo = await this.eventService.getEventById(eventId, false);
 
         return {
             ticket_items: tickets,
@@ -75,7 +75,7 @@ export class PurchasedTicketService {
             };
         }
 
-        const eventInfo = await this.eventService.getEventById(ticket.ticket_types.event_id);
+        const eventInfo = await this.eventService.getEventById(ticket.ticket_types.event_id, false);
 
         return {
             ticket_item: ticket,
