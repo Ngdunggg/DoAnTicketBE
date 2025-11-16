@@ -250,6 +250,157 @@ export class EventService {
         });
     }
 
+    async updateEvent(eventId: string, eventData: CreateEventDto, userId: string) {
+        return await this.prisma.$transaction(async (prisma) => {
+            const existingEvent = await prisma.events.findUnique({
+                where: { id: eventId },
+            });
+
+            if (!existingEvent) {
+                throw new NotFoundException('Event not found');
+            }
+
+            if (existingEvent.organizer_id !== userId) {
+                throw new ForbiddenException('You can only update your own events');
+            }
+
+            if (
+                existingEvent.status !== event_status.pending &&
+                existingEvent.status !== event_status.rejected
+            ) {
+                throw new ForbiddenException('Only pending or rejected events can be updated');
+            }
+
+            const newStatus =
+                existingEvent.status === event_status.rejected
+                    ? event_status.pending
+                    : existingEvent.status;
+
+            // Update event
+            await prisma.events.update({
+                where: { id: eventId },
+                data: {
+                    title: eventData.title,
+                    description: eventData.description,
+                    location: eventData.location || null,
+                    start_time: eventData.start_time,
+                    end_time: eventData.end_time,
+                    status: newStatus,
+                    is_online: eventData.is_online,
+                },
+            });
+
+            // Delete and create categories
+            await prisma.event_categories.deleteMany({
+                where: { event_id: eventId },
+            });
+
+            if (eventData.category_id && eventData.category_id.length > 0) {
+                const existingCategories = await prisma.categories.findMany({
+                    where: { id: { in: eventData.category_id } },
+                    select: { id: true },
+                });
+
+                if (existingCategories.length !== eventData.category_id.length) {
+                    const foundIds = existingCategories.map((cat) => cat.id);
+                    const missingIds = eventData.category_id.filter((id) => !foundIds.includes(id));
+
+                    throw new BadRequestException(`Categories not found: ${missingIds.join(', ')}`);
+                }
+
+                // Assign categories using transaction prisma
+                await prisma.event_categories.createMany({
+                    data: eventData.category_id.map((categoryId) => ({
+                        event_id: eventId,
+                        category_id: categoryId,
+                    })),
+                });
+            }
+
+            // Delete and create images
+            await prisma.event_images.deleteMany({
+                where: { event_id: eventId },
+            });
+
+            if (eventData.images && eventData.images.length > 0) {
+                const validImageTypes = [image_type.banner, image_type.card];
+                const invalidImages = eventData.images.filter((image) => !validImageTypes.includes(image.image_type));
+
+                if (invalidImages.length > 0) {
+                    throw new BadRequestException(
+                        `Invalid image types: ${invalidImages.map((img) => img.image_type).join(', ')}. Only 'banner' and 'card' are allowed.`
+                    );
+                }
+
+                // Validate có ít nhất một ảnh banner
+                const bannerImages = eventData.images.filter((img) => img.image_type === image_type.banner);
+                if (bannerImages.length === 0) {
+                    throw new BadRequestException('At least one banner image is required');
+                }
+
+                // Save uploaded images to database
+                await prisma.event_images.createMany({
+                    data: eventData.images.map((img) => ({
+                        event_id: eventId,
+                        image_url: img.image_url,
+                        image_type: img.image_type,
+                    })),
+                });
+            }
+
+            // Delete and create event dates
+            await prisma.event_dates.deleteMany({
+                where: { event_id: eventId },
+            });
+
+            if (eventData.event_dates && eventData.event_dates.length > 0) {
+                await prisma.event_dates.createMany({
+                    data: eventData.event_dates.map((date) => ({
+                        event_id: eventId,
+                        start_at: date.start_at,
+                        end_at: date.end_at,
+                    })),
+                });
+            }
+
+            // Check if there are purchased tickets before deleting tickets
+            const purchasedTicketsCount = await prisma.purchased_tickets.count({
+                where: { event_id: eventId },
+            });
+
+            if (purchasedTicketsCount > 0) {
+                throw new BadRequestException('Cannot update tickets for event that has purchased tickets');
+            }
+
+            // Delete and create tickets (only if there are no purchased tickets)
+            await prisma.ticket_types.deleteMany({
+                where: { event_id: eventId },
+            });
+
+            if (eventData.tickets && eventData.tickets.length > 0) {
+                await prisma.ticket_types.createMany({
+                    data: eventData.tickets.map((ticket) => ({
+                        event_id: eventId,
+                        name: ticket.name,
+                        price: ticket.price,
+                        initial_quantity: ticket.initial_quantity,
+                        remaining_quantity: ticket.initial_quantity,
+                        status: ticket.status,
+                        description: ticket.description,
+                    })),
+                });
+            }
+
+            // Create or update organizer profile
+            await this.organizerService.createOrUpdateOrganizerProfile(userId, eventData.organizer_profile);
+
+            // Create or update payment method
+            await this.organizerService.createOrUpdatePaymentMethod(userId, eventData.payment_method);
+
+            return { message: 'Event updated successfully', eventId: eventId };
+        });
+    }
+
     async getEventById(id: string, shouldIncrementView: boolean = true) {
         if (!id) {
             throw new BadRequestException('Event id is required');
@@ -632,14 +783,6 @@ export class EventService {
 
         return { message: 'Event deleted successfully' };
     }
-
-    // async updateEvent(id: string, eventData: CreateEventDto) {
-    //     const event = await this.prisma.events.update({
-    //         where: { id },
-    //         data: eventData,
-    //     });
-    //     return event;
-    // }
 
     async updateEventStatus(eventId: string, status: event_status) {
         const event = await this.prisma.events.update({

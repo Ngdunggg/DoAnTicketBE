@@ -42,6 +42,27 @@ export class EventController {
         return this.eventService.createEvent(createEventDto, userId);
     }
 
+    @Patch('/update-event/:id')
+    async updateEvent(
+        @Param('id', new ParseUUIDPipe()) eventId: string,
+        @Body() updateEventDto: CreateEventDto,
+        @Req() req: Request
+    ) {
+        // Lấy userId từ cookies
+        const userId = req.user?.id;
+        
+        if (!userId) {
+            throw new BadRequestException('User ID is required');
+        }
+
+        // Kiểm tra body có tồn tại không
+        if (!updateEventDto) {
+            throw new BadRequestException('Request body is required');
+        }
+
+        return this.eventService.updateEvent(eventId, updateEventDto, userId);
+    }
+
     @Public()
     @Get('/list-events')
     async getAllEvents(): Promise<FormattedEvent[]> {

@@ -40,4 +40,8 @@ export class UpdateUserProfileDto {
     @IsOptional()
     @IsString()
     role?: user_role;
+
+    @IsOptional()
+    @IsBoolean()
+    is_active?: boolean;
 }

@@ -132,6 +132,10 @@ export class AuthService {
             throw new NotFoundException('Invalid email or password');
         }
 
+        if (user.is_active) {
+            throw new BadRequestException('Tài khoản của bạn đã bị khóa');
+        }
+
         // Tạo JWT token
         const payload = { sub: user.id, email: user.email };
         const token = this.jwtService.sign(payload);
