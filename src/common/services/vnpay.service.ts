@@ -2,6 +2,7 @@ import { VnpayConfig } from '@config/vnpay.config';
 import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import * as crypto from 'crypto';
+import * as qs from 'qs';
 
 export interface VnpayPaymentParams {
     orderId: string;
@@ -46,6 +47,16 @@ export class VnpayService {
     }
 
     generatePaymentUrl(params: VnpayPaymentParams): string {
+        // Convert IPv6 localhost to IPv4 (VNPay may not accept IPv6)
+        let ipAddress = params.ipAddress;
+        if (ipAddress === '::1' || ipAddress === '::ffff:127.0.0.1') {
+            ipAddress = '127.0.0.1';
+        }
+        // Extract IPv4 from IPv6-mapped IPv4 address
+        if (ipAddress.startsWith('::ffff:')) {
+            ipAddress = ipAddress.replace('::ffff:', '');
+        }
+
         const vnpParams: Record<string, string> = {
             vnp_Version: this.config.version,
             vnp_Command: this.config.command,
@@ -57,21 +68,27 @@ export class VnpayService {
             vnp_OrderType: this.config.orderType,
             vnp_Amount: (params.amount * 100).toString(), // VNPay expects amount in cents
             vnp_ReturnUrl: this.config.returnUrl,
-            vnp_IpAddr: params.ipAddress,
+            vnp_IpAddr: ipAddress,
             vnp_CreateDate: this.formatDate(new Date()),
         };
 
-        // Sort parameters alphabetically
+        // Sort parameters alphabetically (using VNPay's sortObject method)
         const sortedParams = this.sortObject(vnpParams);
 
-        // Create query string
-        const queryString = this.createQueryString(sortedParams);
+        // Create query string WITHOUT encoding (for hash generation) - using qs.stringify with encode: false
+        const signData = qs.stringify(sortedParams, { encode: false });
 
-        // Generate secure hash
-        const secureHash = this.generateSecureHash(queryString);
+        // Generate secure hash using Buffer (as per VNPay example)
+        const secureHash = this.generateSecureHash(signData);
+
+        // Add secure hash to params
+        sortedParams['vnp_SecureHash'] = secureHash;
+
+        // Create final URL using qs.stringify with encode: false
+        const finalQueryString = qs.stringify(sortedParams, { encode: false });
 
         // Return full payment URL
-        return `${this.config.url}?${queryString}&vnp_SecureHash=${secureHash}`;
+        return `${this.config.url}?${finalQueryString}`;
     }
 
     verifyCallback(callbackParams: VnpayCallbackParams): boolean {
@@ -79,14 +96,14 @@ export class VnpayService {
             // Extract secure hash
             const { vnp_SecureHash, ...params } = callbackParams;
 
-            // Sort parameters alphabetically
-            const sortedParams = this.sortObject(params);
+            // Sort parameters alphabetically (using VNPay's sortObject method)
+            const sortedParams = this.sortObject(params as Record<string, string>);
 
-            // Create query string
-            const queryString = this.createQueryString(sortedParams);
+            // Create query string WITHOUT encoding (for hash verification) - using qs.stringify with encode: false
+            const signData = qs.stringify(sortedParams, { encode: false });
 
-            // Generate secure hash
-            const expectedHash = this.generateSecureHash(queryString);
+            // Generate secure hash using Buffer (as per VNPay example)
+            const expectedHash = this.generateSecureHash(signData);
 
             // Compare hashes
             return expectedHash === vnp_SecureHash;
@@ -101,26 +118,34 @@ export class VnpayService {
     }
 
     private sortObject(obj: Record<string, any>): Record<string, string> {
+        // VNPay's sortObject implementation - encode keys and values, replace %20 with +
+        // This matches the exact implementation from VNPay example
         const sorted: Record<string, string> = {};
-        const keys = Object.keys(obj).sort();
+        const str: string[] = [];
 
-        for (const key of keys) {
-            if (obj[key] !== undefined && obj[key] !== null) {
-                sorted[key] = String(obj[key]);
+        for (const key in obj) {
+            if (Object.prototype.hasOwnProperty.call(obj, key)) {
+                str.push(encodeURIComponent(key));
+            }
+        }
+
+        str.sort();
+
+        for (let i = 0; i < str.length; i++) {
+            const decodedKey = decodeURIComponent(str[i]);
+            if (obj[decodedKey] !== undefined && obj[decodedKey] !== null && obj[decodedKey] !== '') {
+                sorted[str[i]] = encodeURIComponent(String(obj[decodedKey])).replace(/%20/g, '+');
             }
         }
 
         return sorted;
     }
 
-    private createQueryString(params: Record<string, string>): string {
-        return Object.keys(params)
-            .map((key) => `${encodeURIComponent(key)}=${encodeURIComponent(params[key])}`)
-            .join('&');
-    }
-
-    private generateSecureHash(queryString: string): string {
-        return crypto.createHmac('sha512', this.config.secretKey).update(queryString).digest('hex');
+    private generateSecureHash(signData: string): string {
+        // Use Buffer as per VNPay example
+        const hmac = crypto.createHmac('sha512', this.config.secretKey);
+        const signed = hmac.update(Buffer.from(signData, 'utf-8')).digest('hex');
+        return signed;
     }
 
     private formatDate(date: Date): string {
