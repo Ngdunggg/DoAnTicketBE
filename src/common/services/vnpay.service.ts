@@ -118,8 +118,6 @@ export class VnpayService {
     }
 
     private sortObject(obj: Record<string, any>): Record<string, string> {
-        // VNPay's sortObject implementation - encode keys and values, replace %20 with +
-        // This matches the exact implementation from VNPay example
         const sorted: Record<string, string> = {};
         const str: string[] = [];
 

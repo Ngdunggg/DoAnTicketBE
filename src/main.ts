@@ -11,7 +11,7 @@ async function bootstrap() {
         origin: [
             'http://localhost:3000',
             'https://580m9rqm-3000.asse.devtunnels.ms',
-            'exp://192.168.102.11:8081',
+            'exp://192.168.102.12:8081',
             // Add more origins as needed
             'https://nonfilterable-jared-unshingled.ngrok-free.dev',
             /^https:\/\/.*\.ngrok-free\.app$/,
