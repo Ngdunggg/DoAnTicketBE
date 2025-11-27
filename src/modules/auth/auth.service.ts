@@ -164,6 +164,12 @@ export class AuthService {
         const user = await this.userService.findByEmail(createUserDto.email);
 
         if (user) {
+            if (!user.google_id) {
+                await this.prismaService.users.update({
+                    where: { id: user.id },
+                    data: { google_id: createUserDto.google_id },
+                });
+            }
             return user;
         }
 

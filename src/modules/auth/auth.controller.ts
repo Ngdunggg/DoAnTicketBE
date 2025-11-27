@@ -10,7 +10,15 @@ import {
     NotFoundException,
 } from '@nestjs/common';
 import { AuthService } from './auth.service';
-import { ChangePasswordDto, LoginDto, RegisterDto, SendOtpDto, VerifyOtpDto, CheckEmailDto, VerifyChangePasswordDto } from '@common/dto/auth.dto';
+import {
+    ChangePasswordDto,
+    LoginDto,
+    RegisterDto,
+    SendOtpDto,
+    VerifyOtpDto,
+    CheckEmailDto,
+    VerifyChangePasswordDto,
+} from '@common/dto/auth.dto';
 import { GoogleAuthGuard } from '@common/guards/google-auth.guard';
 import { Public } from '@common/decorators/public.decorator';
 import type { Request, Response } from 'express';
@@ -67,26 +75,42 @@ export class AuthController {
     @Get('google/callback')
     @UseGuards(GoogleAuthGuard)
     async googleCallback(@Req() req: Request, @Res() res: Response) {
-        if (!req.user) {
-            throw new UnauthorizedException('Invalid email or password');
-        }
-        const response = await this.authService.loginWithGoogle(req.user?.id);
-        if (!response) {
-            throw new UnauthorizedException('Invalid email or password');
-        }
-
-        // Set cookie và redirect
-        res.cookie('token', response.token, {
-            httpOnly: true,
-            secure: process.env.NODE_ENV === 'production',
-            sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',
-            maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
-            path: '/', 
-        });
-
-        // Redirect với token trong URL để frontend có thể bắt được
         const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
-        res.redirect(`${frontendUrl}/auth/callback?token=${response.token}&user=${encodeURIComponent(JSON.stringify(response.user))}`);
+
+        try {
+            // Check if user exists from Google OAuth
+            if (!req.user) {
+                return res.redirect(
+                    `${frontendUrl}/auth/callback?error=${encodeURIComponent('Không thể lấy thông tin từ Google. Vui lòng thử lại.')}`
+                );
+            }
+
+            // Login with Google
+            const response = await this.authService.loginWithGoogle(req.user.id);
+
+            if (!response) {
+                return res.redirect(
+                    `${frontendUrl}/auth/callback?error=${encodeURIComponent('Đăng nhập thất bại. Vui lòng thử lại.')}`
+                );
+            }
+
+            // Set cookie và redirect với success
+            res.cookie('token', response.token, {
+                httpOnly: true,
+                secure: process.env.NODE_ENV === 'production',
+                sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',
+                maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
+                path: '/',
+            });
+
+            return res.redirect(
+                `${frontendUrl}/auth/callback?token=${response.token}&user=${encodeURIComponent(JSON.stringify(response.user))}`
+            );
+        } catch (error) {
+            // Handle any unexpected errors
+            const errorMessage = error instanceof Error ? error.message : 'Đã xảy ra lỗi. Vui lòng thử lại.';
+            return res.redirect(`${frontendUrl}/auth/callback?error=${encodeURIComponent(errorMessage)}`);
+        }
     }
 
     @Get('profile')
@@ -133,9 +157,6 @@ export class AuthController {
     @Public()
     @Post('verify-password')
     async verifyChangePassword(@Body() verifyChangePasswordDto: VerifyChangePasswordDto) {
-        return await this.authService.verifyChangePassword(
-            verifyChangePasswordDto.email,
-            verifyChangePasswordDto.otp
-        );
+        return await this.authService.verifyChangePassword(verifyChangePasswordDto.email, verifyChangePasswordDto.otp);
     }
 }
