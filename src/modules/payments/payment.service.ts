@@ -350,8 +350,6 @@ export class PaymentService {
                             reserved_quantity: { decrement: item.quantity },
                             // Giảm remaining_quantity (vé đã được bán)
                             remaining_quantity: { decrement: item.quantity },
-                            // Reset reservation expiry vì đã convert thành purchased
-                            reservation_expires_at: null,
                         },
                     });
                 }

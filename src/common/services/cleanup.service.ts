@@ -35,9 +35,9 @@ export class CleanupService {
             
             const result = await this.orderService.cleanupExpiredReservations();
             
-            if (result.cleaned > 0) {
+            if (result.expiredOrders > 0) {
                 this.logger.log(
-                    `Cleanup completed: ${result.cleaned} ticket types cleaned, ${result.expiredOrders} orders expired`
+                    `Cleanup completed: ${result.expiredOrders} orders expired and tickets released`
                 );
             } else {
                 this.logger.debug('No expired reservations found');
@@ -58,7 +58,7 @@ export class CleanupService {
             const result = await this.orderService.cleanupExpiredReservations();
             
             this.logger.log(
-                `Manual cleanup completed: ${result.cleaned} ticket types cleaned, ${result.expiredOrders} orders expired`
+                `Manual cleanup completed: ${result.expiredOrders} orders expired and tickets released`
             );
             
             return result;

@@ -199,7 +199,6 @@ model ticket_types {
   status                 ticket_type_status  @default(active)
   created_at             DateTime            @default(now()) @db.Timestamp(6)
   updated_at             DateTime            @default(now()) @db.Timestamp(6)
-  reservation_expires_at DateTime?           @db.Timestamp(6)
   reserved_quantity      Int                 @default(0)
   order_items            order_items[]
   purchased_tickets      purchased_tickets[]
@@ -208,7 +207,6 @@ model ticket_types {
 
   @@index([event_id], map: "idx_ticket_types_event_id")
   @@index([status], map: "idx_ticket_types_status")
-  @@index([reservation_expires_at], map: "idx_ticket_types_reservation_expires")
 }
 
 model users {

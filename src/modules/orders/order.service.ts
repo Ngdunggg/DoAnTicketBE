@@ -85,14 +85,11 @@ export class OrderService {
                     }
 
                     // 4. Reserve tickets trước khi tạo order
-                    const reservationExpiry = new Date(Date.now() + 15 * 60 * 1000); // 15 phút
-
                     for (const update of reservationUpdates) {
                         await tx.ticket_types.update({
                             where: { id: update.id },
                             data: {
                                 reserved_quantity: { increment: update.quantity },
-                                reservation_expires_at: reservationExpiry,
                             },
                         });
                     }
@@ -210,8 +207,6 @@ export class OrderService {
                     where: { id: item.ticket_type_id },
                     data: {
                         reserved_quantity: { decrement: item.quantity },
-                        // Reset reservation expiry nếu không còn reserved tickets
-                        reservation_expires_at: null,
                     },
                 });
             }
@@ -229,63 +224,21 @@ export class OrderService {
     /**
      * Cleanup expired reservations
      * Method này sẽ được gọi bởi cron job
-     * Xử lý 2 trường hợp:
-     * 1. Cleanup reservations hết hạn (dựa vào reservation_expires_at)
-     * 2. Cleanup orders pending quá 15 phút (dựa vào created_at) - xử lý case user đóng tab
+     * 
+     * Lưu ý: Cleanup dựa vào orders.created_at
+     * vì:
+     * - Một ticket_type có thể có nhiều orders cùng giữ chỗ
+     * - Mỗi order có thời gian hết hạn riêng (tính từ created_at + 15 phút)
      */
     async cleanupExpiredReservations() {
         const now = new Date();
         const fifteenMinutesAgo = new Date(now.getTime() - 15 * 60 * 1000);
 
         return await this.prisma.$transaction(async (tx) => {
-            let cleanedTicketTypes = 0;
             let expiredOrders = 0;
 
-            // 1. Cleanup reservations hết hạn (dựa vào reservation_expires_at)
-            const expiredTicketTypes = await tx.ticket_types.findMany({
-                where: {
-                    reservation_expires_at: { lt: now },
-                    reserved_quantity: { gt: 0 },
-                },
-            });
-
-            if (expiredTicketTypes.length > 0) {
-                // Reset expired reservations
-                await tx.ticket_types.updateMany({
-                    where: {
-                        reservation_expires_at: { lt: now },
-                        reserved_quantity: { gt: 0 },
-                    },
-                    data: {
-                        reserved_quantity: 0,
-                        reservation_expires_at: null,
-                    },
-                });
-
-                cleanedTicketTypes += expiredTicketTypes.length;
-
-                // Update related orders to expired
-                const ticketTypeIds = expiredTicketTypes.map((t) => t.id);
-                const ordersByReservation = await tx.orders.findMany({
-                    where: {
-                        status: orders_status.pending,
-                        order_items: {
-                            some: {
-                                ticket_type_id: { in: ticketTypeIds },
-                            },
-                        },
-                    },
-                });
-
-                if (ordersByReservation.length > 0) {
-                    for (const order of ordersByReservation) {
-                        await this.releaseReservedTicketsForOrder(tx, order.id, orders_status.expired);
-                    }
-                    expiredOrders += ordersByReservation.length;
-                }
-            }
-
-            // 2. Cleanup orders pending quá 15 phút (xử lý case user đóng tab)
+            // Cleanup orders pending quá 15 phút (dựa vào created_at)
+            // Mỗi order có thời gian hết hạn riêng = created_at + 15 phút
             const oldPendingOrders = await tx.orders.findMany({
                 where: {
                     status: orders_status.pending,
@@ -316,7 +269,6 @@ export class OrderService {
             }
 
             return {
-                cleaned: cleanedTicketTypes,
                 expiredOrders,
             };
         });
@@ -351,7 +303,6 @@ export class OrderService {
                 where: { id: item.ticket_type_id },
                 data: {
                     reserved_quantity: { decrement: item.quantity },
-                    reservation_expires_at: null,
                 },
             });
         }
