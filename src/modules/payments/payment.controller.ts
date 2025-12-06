@@ -1,6 +1,6 @@
 import { Controller, Post, Get, Body, Req, Query, Res } from '@nestjs/common';
 import { PaymentService } from './payment.service';
-import { CreatePaymentDto, VnpayCallbackDto, MomoCallbackDto, ZaloPayCallbackDto } from '@common/dto/payment.dto';
+import { CreatePaymentDto, CompleteFreeOrderDto, VnpayCallbackDto, MomoCallbackDto, ZaloPayCallbackDto } from '@common/dto/payment.dto';
 import { Public } from '@common/decorators/public.decorator';
 import type { Request, Response } from 'express';
 
@@ -22,6 +22,15 @@ export class PaymentController {
             '127.0.0.1';
 
         return await this.paymentService.createPaymentUrl(createPaymentDto, userId, ipAddress);
+    }
+
+    @Post('complete-free-order')
+    async completeFreeOrder(@Body() completeFreeOrderDto: CompleteFreeOrderDto, @Req() req: Request) {
+        const userId = req.user?.id;
+        if (!userId) {
+            throw new Error('User not authenticated');
+        }
+        return await this.paymentService.completeFreeOrder(completeFreeOrderDto.order_id, userId);
     }
 
     @Public()

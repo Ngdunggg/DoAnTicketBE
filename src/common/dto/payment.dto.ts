@@ -10,6 +10,11 @@ export class CreatePaymentDto {
     payment_method?: payment_method;
 }
 
+export class CompleteFreeOrderDto {
+    @IsString()
+    order_id: string;
+}
+
 export class VnpayCallbackDto {
     @IsString()
     vnp_Amount: string;

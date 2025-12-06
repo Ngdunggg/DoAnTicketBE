@@ -10,6 +10,7 @@ import { OrderModule } from '@modules/orders/order.module';
 import { PaymentModule } from '@modules/payments/payment.module';
 import { ConfigModule } from '@nestjs/config';
 import { ScheduleModule } from '@nestjs/schedule';
+import { ThrottlerModule, ThrottlerGuard } from '@nestjs/throttler';
 import { ResponseInterceptor } from '@common/interceptors/response.interceptor';
 import { HttpExceptionFilter } from '@common/filters/http-exception.filter';
 import { JwtCookieGuard } from '@common/guards/jwt-cookie.guard';
@@ -24,6 +25,13 @@ import { UploadsModule } from '@modules/uploads/uploads.module';
         }),
         ConfigModule.forFeature(jwtConfig),
         ScheduleModule.forRoot(), // Enable cron jobs
+        ThrottlerModule.forRoot([
+            {
+                name: 'default',
+                ttl: 60000, // 1 phút (60 giây)
+                limit: 10, // 10 requests per minute
+            },
+        ]),
         UserModule,
         PrismaModule,
         AuthModule,
@@ -48,6 +56,10 @@ import { UploadsModule } from '@modules/uploads/uploads.module';
         {
             provide: APP_GUARD,
             useClass: JwtCookieGuard,
+        },
+        {
+            provide: APP_GUARD,
+            useClass: ThrottlerGuard,
         },
     ],
 })

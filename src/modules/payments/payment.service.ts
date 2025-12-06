@@ -391,6 +391,34 @@ export class PaymentService {
     }
 
     /**
+     * Complete free order (totalAmount = 0)
+     */
+    async completeFreeOrder(orderId: string, userId: string) {
+        // 1. Get order và validate
+        const order = await this.orderService.getOrderById(orderId, userId);
+
+        // 2. Validate order is free
+        if (!order.total_amount.equals(0)) {
+            throw new BadRequestException('Order is not free. Total amount must be 0.');
+        }
+
+        // 3. Validate order status
+        if (order.status !== orders_status.pending) {
+            throw new BadRequestException(
+                `Order is not in pending status. Current status: ${order.status}`
+            );
+        }
+
+        // 4. Reuse processSuccessfulPayment logic (tạo tickets, update quantities, gửi email)
+        await this.processSuccessfulPayment(orderId);
+
+        return {
+            success: true,
+            order_id: orderId,
+        };
+    }
+
+    /**
      * Xử lý failed payment - release reserved tickets
      */
     private async processFailedPayment(orderId: string) {

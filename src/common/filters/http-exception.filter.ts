@@ -44,6 +44,8 @@ export class HttpExceptionFilter implements ExceptionFilter {
                 return RESULT_CODE.FORBIDDEN;
             case 404: // HttpStatus.NOT_FOUND
                 return RESULT_CODE.NOT_FOUND;
+            case 429: // HttpStatus.TOO_MANY_REQUESTS
+                return RESULT_CODE.ERROR; // Rate limit error
             case 500: // HttpStatus.INTERNAL_SERVER_ERROR
                 return RESULT_CODE.INTERNAL_SERVER_ERROR;
             default:
